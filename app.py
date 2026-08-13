@@ -1,0 +1,321 @@
+"""
+South Niagara Hospital — Endpoint Deployment Readiness Tracker
+Built by Harsh Kapoor | Niagara Health Technical Analyst Candidate
+"""
+
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
+import random
+import io
+
+# ─── Page Config ───────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="SNH Endpoint Tracker",
+    page_icon="🏥",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ─── Custom CSS ────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+    .main { background-color: #0f1117; }
+    .metric-card {
+        background: #1e2130;
+        border-radius: 10px;
+        padding: 20px;
+        border-left: 4px solid #00b4d8;
+        margin: 5px 0;
+    }
+    .status-ready { color: #00b894; font-weight: bold; }
+    .status-progress { color: #fdcb6e; font-weight: bold; }
+    .status-failed { color: #e17055; font-weight: bold; }
+    .status-pending { color: #636e72; font-weight: bold; }
+    h1 { color: #00b4d8 !important; }
+    .stProgress .st-bo { background-color: #00b894; }
+</style>
+""", unsafe_allow_html=True)
+
+# ─── Data Generation ───────────────────────────────────────────────────────────
+DEPARTMENTS = {
+    "ICU": 450,
+    "Emergency": 380,
+    "Pharmacy": 120,
+    "Radiology": 280,
+    "Operating Rooms": 220,
+    "Nursing Stations": 1200,
+    "Administration": 680,
+    "Labs": 340,
+    "Outpatient": 520,
+    "Facilities": 180,
+}
+
+DEVICE_TYPES = [
+    "Clinical Workstation",
+    "Laptop",
+    "Mobile Device",
+    "Tablet",
+    "Printer",
+    "Scanner",
+    "Clinical Peripheral",
+    "Reception Terminal"
+]
+
+STAGES = ["Received", "Staged", "Imaged", "Enrolled", "Tested", "Ready"]
+STAGE_COLORS = {
+    "Received": "#636e72",
+    "Staged": "#fdcb6e",
+    "Imaged": "#0984e3",
+    "Enrolled": "#6c5ce7",
+    "Tested": "#fd79a8",
+    "Ready": "#00b894",
+    "Failed": "#e17055"
+}
+
+@st.cache_data
+def generate_devices():
+    devices = []
+    device_id = 1
+    random.seed(42)
+
+    for dept, count in DEPARTMENTS.items():
+        for i in range(count):
+            stage_weights = [5, 10, 15, 20, 20, 25, 5]
+            stage = random.choices(
+                STAGES + ["Failed"],
+                weights=stage_weights
+            )[0]
+
+            days_ago = random.randint(1, 90)
+            last_updated = datetime.now() - timedelta(days=days_ago)
+
+            devices.append({
+                "Device ID": f"SNH-{dept[:3].upper()}-{device_id:04d}",
+                "Department": dept,
+                "Device Type": random.choice(DEVICE_TYPES),
+                "Stage": stage,
+                "Assigned User": f"user{device_id}@niagarahealth.on.ca" if stage in ["Enrolled", "Tested", "Ready"] else "",
+                "Last Updated": last_updated.strftime("%Y-%m-%d"),
+                "Notes": "" if stage != "Failed" else random.choice([
+                    "Enrollment failed — Intune policy conflict",
+                    "Driver issue — pending update",
+                    "Hardware fault — replacement ordered",
+                    "Compliance check failed — BitLocker required"
+                ])
+            })
+            device_id += 1
+
+    return pd.DataFrame(devices)
+
+# ─── Load Data ─────────────────────────────────────────────────────────────────
+if "devices" not in st.session_state:
+    st.session_state.devices = generate_devices()
+
+df = st.session_state.devices
+
+# ─── Header ────────────────────────────────────────────────────────────────────
+col1, col2 = st.columns([3, 1])
+with col1:
+    st.markdown("# 🏥 South Niagara Hospital")
+    st.markdown("### Endpoint Deployment Readiness Tracker")
+    st.markdown(f"*Last updated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}*")
+with col2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    go_live = datetime(2027, 3, 1)
+    days_left = (go_live - datetime.now()).days
+    st.metric("Days to Network Go-Live", f"{days_left}", "March 2027")
+    opening = datetime(2028, 6, 1)
+    days_to_open = (opening - datetime.now()).days
+    st.metric("Days to Hospital Opening", f"{days_to_open}", "Summer 2028")
+
+st.divider()
+
+# ─── Top Metrics ───────────────────────────────────────────────────────────────
+total = len(df)
+ready = len(df[df["Stage"] == "Ready"])
+in_progress = len(df[df["Stage"].isin(["Staged", "Imaged", "Enrolled", "Tested"])])
+failed = len(df[df["Stage"] == "Failed"])
+pending = len(df[df["Stage"] == "Received"])
+pct_ready = round(ready / total * 100, 1)
+
+c1, c2, c3, c4, c5 = st.columns(5)
+c1.metric("📦 Total Devices", f"{total:,}", "16,000 target")
+c2.metric("✅ Ready", f"{ready:,}", f"{pct_ready}%")
+c3.metric("🔄 In Progress", f"{in_progress:,}", f"{round(in_progress/total*100,1)}%")
+c4.metric("⚠️ Failed", f"{failed:,}", f"{round(failed/total*100,1)}%", delta_color="inverse")
+c5.metric("📬 Pending", f"{pending:,}", f"{round(pending/total*100,1)}%")
+
+st.divider()
+
+# ─── Overall Progress Bar ──────────────────────────────────────────────────────
+st.markdown("### 📊 Overall Deployment Progress")
+st.progress(pct_ready / 100)
+st.markdown(f"**{pct_ready}% Ready** — {ready:,} of {total:,} devices confirmed ready for patient care")
+
+st.divider()
+
+# ─── Charts Row ────────────────────────────────────────────────────────────────
+col1, col2 = st.columns(2)
+
+with col1:
+    st.markdown("### 🏢 Readiness by Department")
+    dept_stats = df.groupby(["Department", "Stage"]).size().reset_index(name="Count")
+    dept_ready = df[df["Stage"] == "Ready"].groupby("Department").size().reset_index(name="Ready")
+    dept_total = df.groupby("Department").size().reset_index(name="Total")
+    dept_merged = dept_total.merge(dept_ready, on="Department", how="left").fillna(0)
+    dept_merged["% Ready"] = (dept_merged["Ready"] / dept_merged["Total"] * 100).round(1)
+    dept_merged = dept_merged.sort_values("% Ready", ascending=True)
+
+    fig = px.bar(
+        dept_merged,
+        x="% Ready",
+        y="Department",
+        orientation="h",
+        color="% Ready",
+        color_continuous_scale=["#e17055", "#fdcb6e", "#00b894"],
+        range_color=[0, 100],
+        text="% Ready",
+    )
+    fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+    fig.update_layout(
+        plot_bgcolor="#1e2130",
+        paper_bgcolor="#1e2130",
+        font_color="white",
+        showlegend=False,
+        coloraxis_showscale=False,
+        height=400,
+        margin=dict(l=0, r=50, t=20, b=0)
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    st.markdown("### 🔄 Stage Distribution")
+    stage_counts = df["Stage"].value_counts().reset_index()
+    stage_counts.columns = ["Stage", "Count"]
+    stage_counts["Color"] = stage_counts["Stage"].map(STAGE_COLORS)
+
+    fig2 = px.pie(
+        stage_counts,
+        values="Count",
+        names="Stage",
+        color="Stage",
+        color_discrete_map=STAGE_COLORS,
+        hole=0.4
+    )
+    fig2.update_layout(
+        plot_bgcolor="#1e2130",
+        paper_bgcolor="#1e2130",
+        font_color="white",
+        height=400,
+        legend=dict(orientation="v", x=1, y=0.5)
+    )
+    fig2.update_traces(textinfo="percent+label")
+    st.plotly_chart(fig2, use_container_width=True)
+
+st.divider()
+
+# ─── Device Type Breakdown ─────────────────────────────────────────────────────
+st.markdown("### 💻 Readiness by Device Type")
+type_stats = df.groupby(["Device Type", "Stage"]).size().reset_index(name="Count")
+type_ready = df[df["Stage"] == "Ready"].groupby("Device Type").size().reset_index(name="Ready")
+type_total = df.groupby("Device Type").size().reset_index(name="Total")
+type_merged = type_total.merge(type_ready, on="Device Type", how="left").fillna(0)
+type_merged["% Ready"] = (type_merged["Ready"] / type_merged["Total"] * 100).round(1)
+
+cols = st.columns(4)
+for i, row in type_merged.iterrows():
+    col = cols[i % 4]
+    pct = row["% Ready"]
+    color = "#00b894" if pct >= 70 else "#fdcb6e" if pct >= 40 else "#e17055"
+    col.markdown(f"""
+    <div style="background:#1e2130; border-radius:8px; padding:12px; margin:4px 0; border-left:3px solid {color}">
+        <div style="font-size:12px; color:#b2bec3">{row['Device Type']}</div>
+        <div style="font-size:20px; font-weight:bold; color:{color}">{pct:.0f}%</div>
+        <div style="font-size:11px; color:#636e72">{int(row['Ready'])}/{int(row['Total'])} ready</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.divider()
+
+# ─── Failed Devices ────────────────────────────────────────────────────────────
+st.markdown("### ⚠️ Failed Devices — Requires Attention")
+failed_df = df[df["Stage"] == "Failed"][["Device ID", "Department", "Device Type", "Notes", "Last Updated"]]
+if len(failed_df) > 0:
+    st.dataframe(
+        failed_df.head(20),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Device ID": st.column_config.TextColumn("Device ID", width="small"),
+            "Notes": st.column_config.TextColumn("Issue", width="large"),
+        }
+    )
+else:
+    st.success("No failed devices! ✅")
+
+st.divider()
+
+# ─── Sidebar Filters + Device Search ──────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 🔍 Filters")
+    dept_filter = st.multiselect("Department", options=sorted(df["Department"].unique()), default=[])
+    stage_filter = st.multiselect("Stage", options=STAGES + ["Failed"], default=[])
+    type_filter = st.multiselect("Device Type", options=sorted(df["Device Type"].unique()), default=[])
+
+    st.divider()
+    st.markdown("## 📤 Export")
+    if st.button("Export Full Report (CSV)"):
+        csv = df.to_csv(index=False)
+        st.download_button(
+            "⬇️ Download CSV",
+            csv,
+            "SNH_Endpoint_Readiness_Report.csv",
+            "text/csv"
+        )
+
+    st.divider()
+    st.markdown("## 📅 Key Milestones")
+    st.markdown("""
+    - 🔵 **Now** — Staging & Imaging
+    - 🟡 **Q3 2026** — Enrollment wave 1
+    - 🟠 **Q1 2027** — Network go-live
+    - 🟢 **Q2 2027** — Clinical validation
+    - ✅ **Summer 2028** — Hospital opening
+    """)
+
+    st.divider()
+    st.markdown("## ℹ️ About")
+    st.markdown("""
+    Built by **Harsh Kapoor**
+    Technical Analyst Candidate
+    Niagara Health — ICAT Team
+
+    *Modelled around the South Niagara
+    Hospital endpoint deployment scope*
+    """)
+
+# ─── Filtered Device Table ─────────────────────────────────────────────────────
+filtered = df.copy()
+if dept_filter:
+    filtered = filtered[filtered["Department"].isin(dept_filter)]
+if stage_filter:
+    filtered = filtered[filtered["Stage"].isin(stage_filter)]
+if type_filter:
+    filtered = filtered[filtered["Device Type"].isin(type_filter)]
+
+if dept_filter or stage_filter or type_filter:
+    st.markdown(f"### 📋 Filtered Results ({len(filtered):,} devices)")
+    st.dataframe(filtered, use_container_width=True, hide_index=True)
+
+# ─── Footer ────────────────────────────────────────────────────────────────────
+st.divider()
+st.markdown("""
+<div style="text-align:center; color:#636e72; font-size:12px">
+    South Niagara Hospital Endpoint Deployment Tracker •
+    Built for Niagara Health ICAT Team •
+    Network Go-Live: Early 2027 • Hospital Opening: Summer 2028
+</div>
+""", unsafe_allow_html=True)
