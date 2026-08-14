@@ -200,7 +200,25 @@ def import_devices(import_df: pd.DataFrame):
 
 # ─── Load Data ─────────────────────────────────────────────────────────────────
 init_db()
-df = load_devices()
+
+# ─── Mode Toggle ───────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## ⚙️ Mode")
+    mode = st.radio(
+        "Select Mode",
+        ["🎯 Demo Mode", "🔧 Live Mode"],
+        index=0,
+        help="Demo: read-only 16k generated devices. Live: your real persistent data."
+    )
+    if mode == "🎯 Demo Mode":
+        st.info("Demo data — changes not saved")
+        df = generate_devices()
+    else:
+        st.success("Live data — all changes persist")
+        df = load_devices()
+    st.divider()
+
+IS_DEMO = mode == "🎯 Demo Mode"
 
 # ─── Header ────────────────────────────────────────────────────────────────────
 col1, col2 = st.columns([3, 1])
@@ -364,93 +382,120 @@ with st.sidebar:
         )
 
     st.divider()
-    st.markdown("## ➕ Add Device")
-    new_id = st.text_input("Device ID", placeholder="SNH-ICU-0001", key="new_device_id")
-    new_dept = st.selectbox("Department", options=sorted(DEPARTMENTS.keys()), key="new_dept")
-    new_type = st.selectbox("Device Type", options=DEVICE_TYPES, key="new_type")
-    new_stage = st.selectbox("Stage", options=STAGES + ["Failed"], key="new_stage")
-    new_notes = st.text_input("Notes (optional)", placeholder="e.g. Enrollment failed — policy conflict", key="new_notes")
-    if st.button("➕ Add Device", type="primary"):
-        if not new_id.strip():
-            st.error("Device ID is required")
-        else:
-            # Check if device already exists
-            existing = df[df["Device ID"].str.lower() == new_id.strip().lower()]
-            if len(existing) > 0:
-                st.warning(f"⚠️ Device **{new_id.strip()}** already exists — click again to overwrite it")
-                if st.button("✅ Yes, overwrite", key="confirm_overwrite"):
+    if IS_DEMO:
+        st.info("💡 Switch to **Live Mode** to add, edit, or import devices")
+    else:
+        st.markdown("## ➕ Add Device")
+        new_id = st.text_input("Device ID", placeholder="SNH-ICU-0001", key="new_device_id")
+        new_dept = st.selectbox("Department", options=sorted(DEPARTMENTS.keys()), key="new_dept")
+        new_type = st.selectbox("Device Type", options=DEVICE_TYPES, key="new_type")
+        new_stage = st.selectbox("Stage", options=STAGES + ["Failed"], key="new_stage")
+        new_notes = st.text_input("Notes (optional)", placeholder="e.g. Enrollment failed — policy conflict", key="new_notes")
+        if st.button("➕ Add Device", type="primary"):
+            if not new_id.strip():
+                st.error("Device ID is required")
+            else:
+                existing = df[df["Device ID"].str.lower() == new_id.strip().lower()]
+                if len(existing) > 0:
+                    st.warning(f"⚠️ Device **{new_id.strip()}** already exists — click again to overwrite it")
+                    if st.button("✅ Yes, overwrite", key="confirm_overwrite"):
+                        save_device({
+                            "Device ID": new_id.strip(), "Department": new_dept,
+                            "Device Type": new_type, "Stage": new_stage,
+                            "Assigned User": "", "Last Updated": now_est().strftime("%B %d, %Y"),
+                            "Notes": new_notes
+                        })
+                        st.success(f"✅ Updated: {new_id.strip()}")
+                        st.rerun()
+                else:
                     save_device({
-                        "Device ID": new_id.strip(),
-                        "Department": new_dept,
-                        "Device Type": new_type,
-                        "Stage": new_stage,
-                        "Assigned User": "",
-                        "Last Updated": now_est().strftime("%B %d, %Y"),
+                        "Device ID": new_id.strip(), "Department": new_dept,
+                        "Device Type": new_type, "Stage": new_stage,
+                        "Assigned User": "", "Last Updated": now_est().strftime("%B %d, %Y"),
                         "Notes": new_notes
                     })
-                    st.success(f"✅ Updated: {new_id.strip()}")
+                    st.success(f"✅ Added: {new_id.strip()}")
                     st.rerun()
-            else:
-                save_device({
-                    "Device ID": new_id.strip(),
-                    "Department": new_dept,
-                    "Device Type": new_type,
-                    "Stage": new_stage,
-                    "Assigned User": "",
-                    "Last Updated": now_est().strftime("%B %d, %Y"),
-                    "Notes": new_notes
-                })
-                st.success(f"✅ Added: {new_id.strip()}")
-                st.rerun()
 
-    st.divider()
-    st.markdown("## 🔍 Search & Manage Device")
-    search_id = st.text_input("Search by Device ID", placeholder="SNH-ICU-0001")
-    if search_id:
-        result = df[df["Device ID"].str.contains(search_id, case=False, na=False)]
-        if len(result) > 0:
-            st.dataframe(result, use_container_width=True, hide_index=True)
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.markdown("**Update Stage:**")
-                new_stage_update = st.selectbox("New Stage", options=STAGES + ["Failed"], key="update_stage")
-                if st.button("✅ Update Stage"):
-                    update_device_stage(search_id, new_stage_update)
-                    st.success(f"✅ Updated to {new_stage_update}")
-                    st.rerun()
-            with col_b:
-                st.markdown("**Remove Device:**")
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("🗑️ Delete Device", type="secondary"):
-                    delete_device(search_id)
-                    st.success(f"✅ Deleted {search_id}")
-                    st.rerun()
-        else:
-            st.warning("Device not found")
-
-    st.divider()
-    st.markdown("## 📥 Import Devices (CSV)")
-    st.caption("Upload a CSV with columns: Device ID, Department, Device Type, Stage, Notes")
-    uploaded = st.file_uploader("Choose CSV file", type="csv", label_visibility="collapsed")
-    if uploaded:
-        try:
-            import_df = pd.read_csv(uploaded)
-            required = {"Device ID", "Department", "Device Type", "Stage"}
-            if required.issubset(set(import_df.columns)):
-                if "Notes" not in import_df.columns:
-                    import_df["Notes"] = ""
-                if "Assigned User" not in import_df.columns:
-                    import_df["Assigned User"] = ""
-                if "Last Updated" not in import_df.columns:
-                    import_df["Last Updated"] = now_est().strftime("%B %d, %Y")
-                import_devices(import_df)
-                st.success(f"✅ Imported {len(import_df)} devices — scroll up to see updated dashboard")
-                st.cache_data.clear()
+        st.divider()
+        st.markdown("## 🔍 Search & Manage Device")
+        search_id = st.text_input("Search by Device ID", placeholder="SNH-ICU-0001")
+        if search_id:
+            result = df[df["Device ID"].str.contains(search_id, case=False, na=False)]
+            if len(result) > 0:
+                st.dataframe(result, use_container_width=True, hide_index=True)
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.markdown("**Update Stage:**")
+                    new_stage_update = st.selectbox("New Stage", options=STAGES + ["Failed"], key="update_stage")
+                    if st.button("✅ Update Stage"):
+                        update_device_stage(search_id, new_stage_update)
+                        st.success(f"✅ Updated to {new_stage_update}")
+                        st.rerun()
+                with col_b:
+                    st.markdown("**Remove Device:**")
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("🗑️ Delete Device", type="secondary"):
+                        delete_device(search_id)
+                        st.success(f"✅ Deleted {search_id}")
+                        st.rerun()
             else:
-                missing = required - set(import_df.columns)
-                st.error(f"Missing columns: {missing}")
-        except Exception as e:
-            st.error(f"Import failed: {e}")
+                st.warning("Device not found")
+
+        st.divider()
+        st.markdown("## 📥 Import Devices (CSV)")
+        st.caption("Upload a CSV with columns: Device ID, Department, Device Type, Stage, Notes")
+        uploaded = st.file_uploader("Choose CSV file", type="csv", label_visibility="collapsed")
+        if uploaded:
+            try:
+                import_df = pd.read_csv(uploaded)
+                required = {"Device ID", "Department", "Device Type", "Stage"}
+                if required.issubset(set(import_df.columns)):
+                    if "Notes" not in import_df.columns:
+                        import_df["Notes"] = ""
+                    if "Assigned User" not in import_df.columns:
+                        import_df["Assigned User"] = ""
+                    if "Last Updated" not in import_df.columns:
+                        import_df["Last Updated"] = now_est().strftime("%B %d, %Y")
+                    import_devices(import_df)
+                    st.success(f"✅ Imported {len(import_df)} devices — scroll up to see updated dashboard")
+                    st.cache_data.clear()
+                else:
+                    missing = required - set(import_df.columns)
+                    st.error(f"Missing columns: {missing}")
+            except Exception as e:
+                st.error(f"Import failed: {e}")
+
+        st.divider()
+        st.markdown("## 🗑️ Reset Database")
+        st.caption("Clears ALL devices and reloads demo data")
+        if "confirm_reset" not in st.session_state:
+            st.session_state.confirm_reset = False
+        if st.button("🗑️ Reset All Devices", type="secondary"):
+            st.session_state.confirm_reset = True
+        if st.session_state.confirm_reset:
+            st.error("⚠️ This will delete ALL devices. Are you sure?")
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("✅ Yes, reset", key="do_reset"):
+                    conn = get_conn()
+                    conn.execute("DELETE FROM devices")
+                    conn.commit()
+                    conn.close()
+                    generate_devices.clear()
+                    seed_df = generate_devices()
+                    seed_df.columns = [c.lower().replace(" ", "_") for c in seed_df.columns]
+                    conn = get_conn()
+                    seed_df.to_sql("devices", conn, if_exists="append", index=False)
+                    conn.commit()
+                    conn.close()
+                    st.session_state.confirm_reset = False
+                    st.success("✅ Reset complete — 16,000 demo devices restored")
+                    st.rerun()
+            with col_no:
+                if st.button("❌ Cancel", key="cancel_reset"):
+                    st.session_state.confirm_reset = False
+                    st.rerun()
 
     st.divider()
     st.markdown("## 📅 Key Milestones")
