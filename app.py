@@ -117,11 +117,90 @@ def generate_devices():
 
     return pd.DataFrame(devices)
 
-# ─── Load Data ─────────────────────────────────────────────────────────────────
-if "devices" not in st.session_state:
-    st.session_state.devices = generate_devices()
+import sqlite3
+import os
 
-df = st.session_state.devices
+DB_PATH = os.path.join(os.path.dirname(__file__), "devices.db")
+
+def get_conn():
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
+
+def init_db():
+    conn = get_conn()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS devices (
+            device_id TEXT PRIMARY KEY,
+            department TEXT,
+            device_type TEXT,
+            stage TEXT,
+            assigned_user TEXT DEFAULT '',
+            last_updated TEXT,
+            notes TEXT DEFAULT ''
+        )
+    """)
+    conn.commit()
+    # Seed with generated data if empty
+    count = conn.execute("SELECT COUNT(*) FROM devices").fetchone()[0]
+    if count == 0:
+        seed_df = generate_devices()
+        seed_df.columns = [c.lower().replace(" ", "_") for c in seed_df.columns]
+        seed_df.to_sql("devices", conn, if_exists="append", index=False)
+        conn.commit()
+    conn.close()
+
+def load_devices() -> pd.DataFrame:
+    conn = get_conn()
+    df = pd.read_sql("SELECT * FROM devices", conn)
+    conn.close()
+    df.columns = ["Device ID", "Department", "Device Type", "Stage",
+                  "Assigned User", "Last Updated", "Notes"]
+    return df
+
+def save_device(row: dict):
+    conn = get_conn()
+    conn.execute("""
+        INSERT OR REPLACE INTO devices
+        (device_id, department, device_type, stage, assigned_user, last_updated, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (row["Device ID"], row["Department"], row["Device Type"],
+          row["Stage"], row.get("Assigned User", ""),
+          row["Last Updated"], row.get("Notes", "")))
+    conn.commit()
+    conn.close()
+
+def update_device_stage(device_id_pattern: str, new_stage: str):
+    conn = get_conn()
+    conn.execute("""
+        UPDATE devices SET stage=?, last_updated=?
+        WHERE LOWER(device_id) LIKE LOWER(?)
+    """, (new_stage, now_est().strftime("%B %d, %Y"), f"%{device_id_pattern}%"))
+    conn.commit()
+    conn.close()
+
+def delete_device(device_id_pattern: str):
+    conn = get_conn()
+    conn.execute("DELETE FROM devices WHERE LOWER(device_id) LIKE LOWER(?)",
+                 (f"%{device_id_pattern}%",))
+    conn.commit()
+    conn.close()
+
+def import_devices(import_df: pd.DataFrame):
+    conn = get_conn()
+    for _, row in import_df.iterrows():
+        conn.execute("""
+            INSERT OR REPLACE INTO devices
+            (device_id, department, device_type, stage, assigned_user, last_updated, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (row.get("Device ID",""), row.get("Department",""),
+              row.get("Device Type",""), row.get("Stage","Received"),
+              row.get("Assigned User",""), row.get("Last Updated", now_est().strftime("%B %d, %Y")),
+              row.get("Notes","")))
+    conn.commit()
+    conn.close()
+
+# ─── Load Data ─────────────────────────────────────────────────────────────────
+init_db()
+df = load_devices()
 
 # ─── Header ────────────────────────────────────────────────────────────────────
 col1, col2 = st.columns([3, 1])
@@ -275,7 +354,8 @@ with st.sidebar:
     st.divider()
     st.markdown("## 📤 Export")
     if st.button("Export Full Report (CSV)"):
-        csv = df.to_csv(index=False)
+        export_df = load_devices()
+        csv = export_df.to_csv(index=False)
         st.download_button(
             "⬇️ Download CSV",
             csv,
@@ -294,7 +374,7 @@ with st.sidebar:
         if not new_id.strip():
             st.error("Device ID is required")
         else:
-            new_row = {
+            save_device({
                 "Device ID": new_id.strip(),
                 "Department": new_dept,
                 "Device Type": new_type,
@@ -302,12 +382,9 @@ with st.sidebar:
                 "Assigned User": "",
                 "Last Updated": now_est().strftime("%B %d, %Y"),
                 "Notes": new_notes
-            }
-            st.session_state.devices = pd.concat(
-                [st.session_state.devices, pd.DataFrame([new_row])],
-                ignore_index=True
-            )
-            st.success(f"✅ Added: {new_id.strip()} — refresh dashboard to see updated stats")
+            })
+            st.success(f"✅ Added: {new_id.strip()}")
+            st.rerun()
 
     st.divider()
     st.markdown("## 🔍 Search & Manage Device")
@@ -321,18 +398,16 @@ with st.sidebar:
                 st.markdown("**Update Stage:**")
                 new_stage_update = st.selectbox("New Stage", options=STAGES + ["Failed"], key="update_stage")
                 if st.button("✅ Update Stage"):
-                    mask = st.session_state.devices["Device ID"].str.contains(search_id, case=False, na=False)
-                    st.session_state.devices.loc[mask, "Stage"] = new_stage_update
-                    import datetime as dt
-                    st.session_state.devices.loc[mask, "Last Updated"] = now_est().strftime("%B %d, %Y")
+                    update_device_stage(search_id, new_stage_update)
                     st.success(f"✅ Updated to {new_stage_update}")
+                    st.rerun()
             with col_b:
                 st.markdown("**Remove Device:**")
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("🗑️ Delete Device", type="secondary"):
-                    mask = ~st.session_state.devices["Device ID"].str.contains(search_id, case=False, na=False)
-                    st.session_state.devices = st.session_state.devices[mask].reset_index(drop=True)
+                    delete_device(search_id)
                     st.success(f"✅ Deleted {search_id}")
+                    st.rerun()
         else:
             st.warning("Device not found")
 
@@ -345,18 +420,15 @@ with st.sidebar:
             import_df = pd.read_csv(uploaded)
             required = {"Device ID", "Department", "Device Type", "Stage"}
             if required.issubset(set(import_df.columns)):
-                import datetime as dt
                 if "Notes" not in import_df.columns:
                     import_df["Notes"] = ""
                 if "Assigned User" not in import_df.columns:
                     import_df["Assigned User"] = ""
                 if "Last Updated" not in import_df.columns:
                     import_df["Last Updated"] = now_est().strftime("%B %d, %Y")
-                st.session_state.devices = pd.concat(
-                    [st.session_state.devices, import_df],
-                    ignore_index=True
-                ).drop_duplicates(subset=["Device ID"], keep="last")
-                st.success(f"✅ Imported {len(import_df)} devices — scroll up to see dashboard")
+                import_devices(import_df)
+                st.success(f"✅ Imported {len(import_df)} devices")
+                st.rerun()
             else:
                 missing = required - set(import_df.columns)
                 st.error(f"Missing columns: {missing}")
