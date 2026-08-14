@@ -307,8 +307,7 @@ with st.sidebar:
                 [st.session_state.devices, pd.DataFrame([new_row])],
                 ignore_index=True
             )
-            st.success(f"✅ Added: {new_id.strip()}")
-            st.rerun()
+            st.success(f"✅ Added: {new_id.strip()} — refresh dashboard to see updated stats")
 
     st.divider()
     st.markdown("## 🔍 Search & Manage Device")
@@ -326,16 +325,14 @@ with st.sidebar:
                     st.session_state.devices.loc[mask, "Stage"] = new_stage_update
                     import datetime as dt
                     st.session_state.devices.loc[mask, "Last Updated"] = now_est().strftime("%B %d, %Y")
-                    st.success(f"Updated to {new_stage_update}")
-                    st.rerun()
+                    st.success(f"✅ Updated to {new_stage_update}")
             with col_b:
                 st.markdown("**Remove Device:**")
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("🗑️ Delete Device", type="secondary"):
                     mask = ~st.session_state.devices["Device ID"].str.contains(search_id, case=False, na=False)
                     st.session_state.devices = st.session_state.devices[mask].reset_index(drop=True)
-                    st.success(f"Deleted {search_id}")
-                    st.rerun()
+                    st.success(f"✅ Deleted {search_id}")
         else:
             st.warning("Device not found")
 
@@ -359,8 +356,7 @@ with st.sidebar:
                     [st.session_state.devices, import_df],
                     ignore_index=True
                 ).drop_duplicates(subset=["Device ID"], keep="last")
-                st.success(f"✅ Imported {len(import_df)} devices")
-                st.rerun()
+                st.success(f"✅ Imported {len(import_df)} devices — scroll up to see dashboard")
             else:
                 missing = required - set(import_df.columns)
                 st.error(f"Missing columns: {missing}")
