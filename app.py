@@ -137,10 +137,7 @@ with col2:
 
 st.divider()
 
-# ─── Tabs ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🌊 Deployment Waves", "📋 Runbook"])
-
-with tab1:
+# ─── Top Metrics ───────────────────────────────────────────────────────────────
 total = len(df)
 ready = len(df[df["Stage"] == "Ready"])
 in_progress = len(df[df["Stage"].isin(["Staged", "Imaged", "Enrolled", "Tested"])])
@@ -316,6 +313,116 @@ if type_filter:
 if dept_filter or stage_filter or type_filter:
     st.markdown(f"### 📋 Filtered Results ({len(filtered):,} devices)")
     st.dataframe(filtered, use_container_width=True, hide_index=True)
+
+# ─── Tabs — Deployment Waves + Runbook ────────────────────────────────────────
+st.divider()
+tab1, tab2, tab3 = st.tabs(["🌊 Deployment Waves", "📋 Runbook", "ℹ️ About"])
+
+with tab1:
+    st.markdown("## 🌊 Deployment Wave Plan — 16,000 Devices")
+    waves = {
+        "Wave": ["1 — Pilot", "2 — Non-Clinical", "3 — Network Go-Live", "4 — Clinical", "5 — Final + ICU"],
+        "Period": ["Q3 2026", "Q4 2026", "Q1 2027", "Q2–Q3 2027", "Q4 2027–Q2 2028"],
+        "Devices": [200, 2500, 4000, 6500, 2800],
+        "Departments": ["Administration", "Admin, Facilities, Labs", "Outpatient, Radiology", "Nursing, ER, OR, Pharmacy", "ICU + remaining clinical"],
+        "Status": ["🔄 In Progress", "⏳ Planned", "⏳ Planned", "⏳ Planned", "⏳ Planned"],
+    }
+    wave_df = pd.DataFrame(waves)
+    st.dataframe(wave_df, use_container_width=True, hide_index=True)
+
+    st.markdown("### Wave Principles")
+    st.markdown("""
+    - ✅ **Pilot first** — validate every process on 200 devices before scaling
+    - 🏥 **Clinical areas last** — protect patient care, non-clinical areas deploy first
+    - 📋 **Document every wave** — what broke, what changed, lessons learned
+    - 🔒 **PHIPA compliance** — every device checked before clinical go-live
+    - 🔄 **5% spare buffer** — ~800 spare devices staged for go-live day
+    """)
+
+    fig_wave = px.bar(
+        wave_df, x="Wave", y="Devices",
+        color="Devices",
+        color_continuous_scale=["#0984e3", "#6c5ce7", "#00b894"],
+        text="Devices",
+        title="Devices Per Wave"
+    )
+    fig_wave.update_layout(
+        plot_bgcolor="#1e2130", paper_bgcolor="#1e2130",
+        font_color="white", coloraxis_showscale=False,
+        height=300, margin=dict(t=40, b=0)
+    )
+    fig_wave.update_traces(textposition="outside")
+    st.plotly_chart(fig_wave, use_container_width=True)
+
+with tab2:
+    st.markdown("## 📋 Deployment Runbook")
+    st.markdown("### Device Stage Pipeline")
+    st.markdown("""
+    ```
+    📦 RECEIVED → 🔧 STAGED → 💿 IMAGED → ☁️ ENROLLED → ✅ TESTED → 🟢 READY
+    ```
+    """)
+    stages_doc = {
+        "Stage": ["Received", "Staged", "Imaged", "Enrolled", "Tested", "Ready", "Failed"],
+        "Action": [
+            "Log device, apply asset tag, record serial number",
+            "Verify hardware, place in imaging queue",
+            "PXE boot, deploy OS via SCCM task sequence, install drivers",
+            "Autopilot or manual Intune enrollment, verify compliance",
+            "Functional test, clinical workflow validation with staff",
+            "Deliver to assigned location, notify department",
+            "Log issue, assign remediation, re-enter pipeline after fix"
+        ],
+        "Owner": ["Logistics", "Tech Analyst", "Tech Analyst", "Tech Analyst", "Tech Analyst + Clinical", "ICAT Team", "Tech Analyst"],
+    }
+    st.dataframe(pd.DataFrame(stages_doc), use_container_width=True, hide_index=True)
+
+    st.markdown("### Pre-Deployment Checklist")
+    st.markdown("""
+    - ☐ Intune tenant configured — auto-enrollment enabled
+    - ☐ Entra ID device groups created by department
+    - ☐ Compliance policies tested on pilot device
+    - ☐ Configuration profiles created (Wi-Fi, VPN, certs)
+    - ☐ App packages prepared and tested
+    - ☐ Autopilot profiles assigned to device groups
+    - ☐ SCCM task sequence validated
+    - ☐ Hardware hash CSV ready for Autopilot upload
+    - ☐ PHIPA checklist signed off
+    - ☐ Change request ticket opened
+    """)
+
+    st.markdown("### Failure Handling")
+    st.markdown("""
+    If a device fails at any stage:
+    1. Update tracker → **FAILED**
+    2. Document issue in Notes (error message, steps tried)
+    3. Categorize: Hardware / Enrollment / Compliance / Driver / App
+    4. Assign to team member for resolution
+    5. Re-enter pipeline at correct stage after fix
+    6. Document resolution for future reference
+    """)
+
+with tab3:
+    st.markdown("## ℹ️ About This Project")
+    st.markdown("""
+    **South Niagara Hospital Endpoint Deployment Tracker**
+
+    Built by **Harsh Kapoor** — Technical Analyst Candidate, Niagara Health ICAT Team.
+
+    This tool was designed to support the South Niagara Hospital redevelopment project,
+    modelled around the 16,000+ device deployment scope leading to hospital opening in Summer 2028.
+
+    **Key Milestones:**
+    - 🔵 Now → Q3 2026: Pilot wave + staging
+    - 🟡 Q4 2026: Non-clinical rollout
+    - 🟠 Early 2027: Network go-live
+    - 🟢 Q2 2027: Clinical validation
+    - ✅ Summer 2028: Hospital opening day
+
+    **Tech Stack:** Python · Streamlit · Pandas · Plotly
+
+    **GitHub:** [harashkapoor/-snh-endpoint-tracker](https://github.com/harashkapoor/-snh-endpoint-tracker)
+    """)
 
 # ─── Footer ────────────────────────────────────────────────────────────────────
 st.divider()
