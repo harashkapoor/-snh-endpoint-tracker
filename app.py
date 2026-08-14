@@ -285,33 +285,30 @@ with st.sidebar:
 
     st.divider()
     st.markdown("## ➕ Add Device")
-    with st.form("add_device_form"):
-        new_id = st.text_input("Device ID", placeholder="SNH-ICU-0001")
-        new_dept = st.selectbox("Department", options=sorted(DEPARTMENTS.keys()))
-        new_type = st.selectbox("Device Type", options=DEVICE_TYPES)
-        new_stage = st.selectbox("Stage", options=STAGES + ["Failed"])
-        new_notes = st.text_input("Notes (optional)", placeholder="e.g. Enrollment failed — policy conflict")
-        submitted = st.form_submit_button("➕ Add Device")
-        if submitted:
-            if not new_id.strip():
-                st.error("Device ID is required")
-            else:
-                import datetime as dt
-                new_row = {
-                    "Device ID": new_id.strip(),
-                    "Department": new_dept,
-                    "Device Type": new_type,
-                    "Stage": new_stage,
-                    "Assigned User": "",
-                    "Last Updated": now_est().strftime("%B %d, %Y"),
-                    "Notes": new_notes
-                }
-                st.session_state.devices = pd.concat(
-                    [st.session_state.devices, pd.DataFrame([new_row])],
-                    ignore_index=True
-                )
-                st.success(f"✅ Added: {new_id.strip()}")
-                st.rerun()
+    new_id = st.text_input("Device ID", placeholder="SNH-ICU-0001", key="new_device_id")
+    new_dept = st.selectbox("Department", options=sorted(DEPARTMENTS.keys()), key="new_dept")
+    new_type = st.selectbox("Device Type", options=DEVICE_TYPES, key="new_type")
+    new_stage = st.selectbox("Stage", options=STAGES + ["Failed"], key="new_stage")
+    new_notes = st.text_input("Notes (optional)", placeholder="e.g. Enrollment failed — policy conflict", key="new_notes")
+    if st.button("➕ Add Device", type="primary"):
+        if not new_id.strip():
+            st.error("Device ID is required")
+        else:
+            new_row = {
+                "Device ID": new_id.strip(),
+                "Department": new_dept,
+                "Device Type": new_type,
+                "Stage": new_stage,
+                "Assigned User": "",
+                "Last Updated": now_est().strftime("%B %d, %Y"),
+                "Notes": new_notes
+            }
+            st.session_state.devices = pd.concat(
+                [st.session_state.devices, pd.DataFrame([new_row])],
+                ignore_index=True
+            )
+            st.success(f"✅ Added: {new_id.strip()}")
+            st.rerun()
 
     st.divider()
     st.markdown("## 🔍 Search & Manage Device")
