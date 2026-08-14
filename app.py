@@ -79,7 +79,7 @@ STAGE_COLORS = {
     "Failed": "#e17055"
 }
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def generate_devices():
     devices = []
     device_id = 1
@@ -284,28 +284,31 @@ with st.sidebar:
     st.markdown("## ➕ Add Device")
     with st.form("add_device_form"):
         new_id = st.text_input("Device ID", placeholder="SNH-ICU-0001")
-        new_dept = st.selectbox("Department", options=sorted(df["Department"].unique()))
+        new_dept = st.selectbox("Department", options=sorted(DEPARTMENTS.keys()))
         new_type = st.selectbox("Device Type", options=DEVICE_TYPES)
         new_stage = st.selectbox("Stage", options=STAGES + ["Failed"])
         new_notes = st.text_input("Notes (optional)", placeholder="e.g. Enrollment failed — policy conflict")
-        submitted = st.form_submit_button("Add Device")
-        if submitted and new_id:
-            import datetime as dt
-            new_row = {
-                "Device ID": new_id,
-                "Department": new_dept,
-                "Device Type": new_type,
-                "Stage": new_stage,
-                "Assigned User": "",
-                "Last Updated": dt.datetime.now().strftime("%Y-%m-%d"),
-                "Notes": new_notes
-            }
-            st.session_state.devices = pd.concat(
-                [st.session_state.devices, pd.DataFrame([new_row])],
-                ignore_index=True
-            )
-            st.success(f"✅ Added {new_id}")
-            st.rerun()
+        submitted = st.form_submit_button("➕ Add Device")
+        if submitted:
+            if not new_id.strip():
+                st.error("Device ID is required")
+            else:
+                import datetime as dt
+                new_row = {
+                    "Device ID": new_id.strip(),
+                    "Department": new_dept,
+                    "Device Type": new_type,
+                    "Stage": new_stage,
+                    "Assigned User": "",
+                    "Last Updated": dt.datetime.now().strftime("%Y-%m-%d"),
+                    "Notes": new_notes
+                }
+                st.session_state.devices = pd.concat(
+                    [st.session_state.devices, pd.DataFrame([new_row])],
+                    ignore_index=True
+                )
+                st.success(f"✅ Added: {new_id.strip()}")
+                st.rerun()
 
     st.divider()
     st.markdown("## 🔍 Search & Manage Device")
