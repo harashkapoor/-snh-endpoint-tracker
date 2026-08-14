@@ -8,6 +8,9 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import pytz
+def now_est():
+    return datetime.now(pytz.timezone("America/Toronto"))
 import random
 import io
 
@@ -125,7 +128,7 @@ col1, col2 = st.columns([3, 1])
 with col1:
     st.markdown("# 🏥 South Niagara Hospital")
     st.markdown("### Endpoint Deployment Readiness Tracker")
-    st.markdown(f"*Last updated: {datetime.now().strftime('%B %d, %Y at %I:%M %p')}*")
+    st.markdown(f"*Last updated: {now_est().strftime('%B %d, %Y at %I:%M %p')} EST*")
 with col2:
     st.markdown("<br>", unsafe_allow_html=True)
     go_live = datetime(2027, 3, 1)
@@ -300,7 +303,7 @@ with st.sidebar:
                     "Device Type": new_type,
                     "Stage": new_stage,
                     "Assigned User": "",
-                    "Last Updated": dt.datetime.now().strftime("%Y-%m-%d"),
+                    "Last Updated": now_est().strftime("%B %d, %Y"),
                     "Notes": new_notes
                 }
                 st.session_state.devices = pd.concat(
@@ -325,7 +328,7 @@ with st.sidebar:
                     mask = st.session_state.devices["Device ID"].str.contains(search_id, case=False, na=False)
                     st.session_state.devices.loc[mask, "Stage"] = new_stage_update
                     import datetime as dt
-                    st.session_state.devices.loc[mask, "Last Updated"] = dt.datetime.now().strftime("%Y-%m-%d")
+                    st.session_state.devices.loc[mask, "Last Updated"] = now_est().strftime("%B %d, %Y")
                     st.success(f"Updated to {new_stage_update}")
                     st.rerun()
             with col_b:
@@ -354,7 +357,7 @@ with st.sidebar:
                 if "Assigned User" not in import_df.columns:
                     import_df["Assigned User"] = ""
                 if "Last Updated" not in import_df.columns:
-                    import_df["Last Updated"] = dt.datetime.now().strftime("%Y-%m-%d")
+                    import_df["Last Updated"] = now_est().strftime("%B %d, %Y")
                 st.session_state.devices = pd.concat(
                     [st.session_state.devices, import_df],
                     ignore_index=True
