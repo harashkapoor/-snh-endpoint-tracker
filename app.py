@@ -308,23 +308,61 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-    st.markdown("## 🔍 Search Device")
+    st.markdown("## 🔍 Search & Manage Device")
     search_id = st.text_input("Search by Device ID", placeholder="SNH-ICU-0001")
     if search_id:
         result = df[df["Device ID"].str.contains(search_id, case=False, na=False)]
         if len(result) > 0:
             st.dataframe(result, use_container_width=True, hide_index=True)
-            st.markdown("**Update Stage:**")
-            new_stage_update = st.selectbox("New Stage", options=STAGES + ["Failed"], key="update_stage")
-            if st.button("Update Stage"):
-                mask = st.session_state.devices["Device ID"].str.contains(search_id, case=False, na=False)
-                st.session_state.devices.loc[mask, "Stage"] = new_stage_update
-                import datetime as dt
-                st.session_state.devices.loc[mask, "Last Updated"] = dt.datetime.now().strftime("%Y-%m-%d")
-                st.success(f"✅ Updated to {new_stage_update}")
-                st.rerun()
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown("**Update Stage:**")
+                new_stage_update = st.selectbox("New Stage", options=STAGES + ["Failed"], key="update_stage")
+                if st.button("✅ Update Stage"):
+                    mask = st.session_state.devices["Device ID"].str.contains(search_id, case=False, na=False)
+                    st.session_state.devices.loc[mask, "Stage"] = new_stage_update
+                    import datetime as dt
+                    st.session_state.devices.loc[mask, "Last Updated"] = dt.datetime.now().strftime("%Y-%m-%d")
+                    st.success(f"Updated to {new_stage_update}")
+                    st.rerun()
+            with col_b:
+                st.markdown("**Remove Device:**")
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🗑️ Delete Device", type="secondary"):
+                    mask = ~st.session_state.devices["Device ID"].str.contains(search_id, case=False, na=False)
+                    st.session_state.devices = st.session_state.devices[mask].reset_index(drop=True)
+                    st.success(f"Deleted {search_id}")
+                    st.rerun()
         else:
             st.warning("Device not found")
+
+    st.divider()
+    st.markdown("## 📥 Import Devices (CSV)")
+    st.caption("Upload a CSV with columns: Device ID, Department, Device Type, Stage, Notes")
+    uploaded = st.file_uploader("Choose CSV file", type="csv", label_visibility="collapsed")
+    if uploaded:
+        try:
+            import_df = pd.read_csv(uploaded)
+            required = {"Device ID", "Department", "Device Type", "Stage"}
+            if required.issubset(set(import_df.columns)):
+                import datetime as dt
+                if "Notes" not in import_df.columns:
+                    import_df["Notes"] = ""
+                if "Assigned User" not in import_df.columns:
+                    import_df["Assigned User"] = ""
+                if "Last Updated" not in import_df.columns:
+                    import_df["Last Updated"] = dt.datetime.now().strftime("%Y-%m-%d")
+                st.session_state.devices = pd.concat(
+                    [st.session_state.devices, import_df],
+                    ignore_index=True
+                ).drop_duplicates(subset=["Device ID"], keep="last")
+                st.success(f"✅ Imported {len(import_df)} devices")
+                st.rerun()
+            else:
+                missing = required - set(import_df.columns)
+                st.error(f"Missing columns: {missing}")
+        except Exception as e:
+            st.error(f"Import failed: {e}")
 
     st.divider()
     st.markdown("## 📅 Key Milestones")
