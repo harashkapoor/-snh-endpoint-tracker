@@ -427,8 +427,8 @@ with st.sidebar:
                 if "Last Updated" not in import_df.columns:
                     import_df["Last Updated"] = now_est().strftime("%B %d, %Y")
                 import_devices(import_df)
-                st.success(f"✅ Imported {len(import_df)} devices")
-                st.rerun()
+                st.success(f"✅ Imported {len(import_df)} devices — scroll up to see updated dashboard")
+                st.cache_data.clear()
             else:
                 missing = required - set(import_df.columns)
                 st.error(f"Missing columns: {missing}")
