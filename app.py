@@ -41,16 +41,20 @@ st.markdown("""
 
 # ─── Data Generation ───────────────────────────────────────────────────────────
 DEPARTMENTS = {
-    "ICU": 450,
-    "Emergency": 380,
-    "Pharmacy": 120,
-    "Radiology": 280,
-    "Operating Rooms": 220,
-    "Nursing Stations": 1200,
-    "Administration": 680,
-    "Labs": 340,
-    "Outpatient": 520,
-    "Facilities": 180,
+    "ICU": 1200,
+    "Emergency": 1000,
+    "Pharmacy": 400,
+    "Radiology": 800,
+    "Operating Rooms": 600,
+    "Nursing Stations": 4000,
+    "Administration": 2000,
+    "Labs": 1200,
+    "Outpatient": 1800,
+    "Facilities": 800,
+    "Biomedical": 600,
+    "IT Infrastructure": 400,
+    "Rehabilitation": 600,
+    "Mental Health": 600,
 }
 
 DEVICE_TYPES = [
@@ -133,7 +137,10 @@ with col2:
 
 st.divider()
 
-# ─── Top Metrics ───────────────────────────────────────────────────────────────
+# ─── Tabs ──────────────────────────────────────────────────────────────────────
+tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🌊 Deployment Waves", "📋 Runbook"])
+
+with tab1:
 total = len(df)
 ready = len(df[df["Stage"] == "Ready"])
 in_progress = len(df[df["Stage"].isin(["Staged", "Imaged", "Enrolled", "Tested"])])
@@ -142,7 +149,7 @@ pending = len(df[df["Stage"] == "Received"])
 pct_ready = round(ready / total * 100, 1)
 
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("📦 Total Devices", f"{total:,}", "16,000 target")
+c1.metric("📦 Total Devices", f"{total:,}", f"of 16,000 target")
 c2.metric("✅ Ready", f"{ready:,}", f"{pct_ready}%")
 c3.metric("🔄 In Progress", f"{in_progress:,}", f"{round(in_progress/total*100,1)}%")
 c4.metric("⚠️ Failed", f"{failed:,}", f"{round(failed/total*100,1)}%", delta_color="inverse")
