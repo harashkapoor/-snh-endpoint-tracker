@@ -374,17 +374,34 @@ with st.sidebar:
         if not new_id.strip():
             st.error("Device ID is required")
         else:
-            save_device({
-                "Device ID": new_id.strip(),
-                "Department": new_dept,
-                "Device Type": new_type,
-                "Stage": new_stage,
-                "Assigned User": "",
-                "Last Updated": now_est().strftime("%B %d, %Y"),
-                "Notes": new_notes
-            })
-            st.success(f"✅ Added: {new_id.strip()}")
-            st.rerun()
+            # Check if device already exists
+            existing = df[df["Device ID"].str.lower() == new_id.strip().lower()]
+            if len(existing) > 0:
+                st.warning(f"⚠️ Device **{new_id.strip()}** already exists — click again to overwrite it")
+                if st.button("✅ Yes, overwrite", key="confirm_overwrite"):
+                    save_device({
+                        "Device ID": new_id.strip(),
+                        "Department": new_dept,
+                        "Device Type": new_type,
+                        "Stage": new_stage,
+                        "Assigned User": "",
+                        "Last Updated": now_est().strftime("%B %d, %Y"),
+                        "Notes": new_notes
+                    })
+                    st.success(f"✅ Updated: {new_id.strip()}")
+                    st.rerun()
+            else:
+                save_device({
+                    "Device ID": new_id.strip(),
+                    "Department": new_dept,
+                    "Device Type": new_type,
+                    "Stage": new_stage,
+                    "Assigned User": "",
+                    "Last Updated": now_est().strftime("%B %d, %Y"),
+                    "Notes": new_notes
+                })
+                st.success(f"✅ Added: {new_id.strip()}")
+                st.rerun()
 
     st.divider()
     st.markdown("## 🔍 Search & Manage Device")
